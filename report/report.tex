@@ -23,10 +23,10 @@
 \lstset{basicstyle=\ttfamily}
 
 % Title portion
-\title{Assignment 1:\\ {Exploring OpenGL Programming}} 
+\title{Assignment 3:\\ {Basic Ray Tracing}} 
 
-\author{Name: \quad \\ student number:\
-\\email: \quad \texttt{}}
+\author{Name: \quad Kaichun Qiao \\ student number: 2022533099\
+\\email: \quad \texttt{qiaokch2022@shanghaitech.edu.cn}}
 
 % Document starts
 \begin{document}
@@ -35,8 +35,91 @@
 \vspace*{2 ex}
 
 \section{Introduction}
+In this assignment, we implemented a basic ray tracer. The core components include ray-triangle intersection, BVH tree construction and traversal, and rendering the Cornell box with simple direct illumination and refractive materials.
+
 \section{Implementation Details}
+
+\subsection{Ray-Triangle Intersection}
+We implemented the ray-triangle intersection using the Möller–Trumbore intersection algorithm. Given a ray $R(t) = O + tD$ and a triangle with vertices $V_0, V_1, V_2$, we can express the intersection point $P$ in terms of barycentric coordinates $(u, v)$:
+\begin{equation}
+P = (1 - u - v)V_0 + uV_1 + vV_2
+\end{equation}
+By equating $R(t) = P$, we solve the linear system for $t, u, v$ using Cramer's rule.
+\begin{equation}
+\begin{bmatrix}
+-D & E_1 & E_2
+\end{bmatrix}
+\begin{bmatrix}
+t \\ u \\ v
+\end{bmatrix}
+= S
+\end{equation}
+where $E_1 = V_1 - V_0$, $E_2 = V_2 - V_0$, and $S = O - V_0$.
+If the determinant is close to zero, the ray is parallel to the triangle. Otherwise, we compute $u, v, t$ and check if they satisfy the validity conditions: $u \ge 0, v \ge 0, u + v \le 1$, and $t$ is within the valid range $[t_{min}, t_{max}]$.
+
+\subsection{Ray-AABB Intersection}
+For Ray-AABB intersection, we used the slab method. An Axis-Aligned Bounding Box (AABB) is defined by the intersection of three pairs of parallel planes (slabs). For each axis $i \in \{x, y, z\}$, we compute the intersection intervals $[t_{0,i}, t_{1,i}]$ of the ray with the two planes defined by the AABB's bounds.
+We then compute the intersection of these intervals:
+\begin{equation}
+t_{enter} = \max_{i} (\min(t_{0,i}, t_{1,i}))
+\end{equation}
+\begin{equation}
+t_{exit} = \min_{i} (\max(t_{0,i}, t_{1,i}))
+\end{equation}
+The ray intersects the AABB if and only if $t_{enter} \le t_{exit}$ and the interval $[t_{enter}, t_{exit}]$ overlaps with the ray's valid time range.
+
+\subsection{BVH Construction}
+We implemented a Bounding Volume Hierarchy (BVH) to accelerate ray tracing. The construction is a recursive process:
+\begin{enumerate}
+    \item \textbf{Base Case}: If the number of primitives in the current node is small (e.g., $\le 1$) or the maximum depth is reached, we create a leaf node containing the primitives.
+    \item \textbf{Splitting}: For internal nodes, we choose the longest axis of the current node's bounding box as the splitting dimension. We use the median heuristic to split the primitives. Specifically, we sort the primitives based on their centroids along the chosen axis and split them into two equal halves.
+    \item \textbf{Recursion}: We recursively build the left and right child nodes with the split primitives.
+    \item \textbf{Bounding Box}: Each node maintains an AABB that encloses all primitives in its subtree, which is computed by uniting the AABBs of its children (or primitives for leaf nodes).
+\end{enumerate}
+
+\subsection{Direct Illumination Integrator}
+The `IntersectionTestIntegrator` computes the direct illumination at the first intersection point.
+\begin{enumerate}
+    \item \textbf{Primary Ray}: For each pixel, we generate primary rays from the camera.
+    \item \textbf{Intersection}: We trace the ray into the scene to find the closest intersection point.
+    \item \textbf{Shading}: If the intersection surface is diffuse, we iterate over all light sources. For each light, we cast a shadow ray towards it to check for visibility.
+    \item \textbf{Shadows}: If the shadow ray is occluded by an opaque object, the point is in shadow. If it hits a refractive object (like glass), we continue the ray through the object to support transparent shadows.
+    \item \textbf{Contribution}: If visible, we compute the light contribution using the Lambertian BRDF: $L = \Phi \cdot \frac{1}{4\pi r^2} \cdot \rho \cdot \max(0, \mathbf{n} \cdot \mathbf{l})$, where $\Phi$ is flux, $r$ is distance, and $\rho$ is albedo.
+\end{enumerate}
+
+\subsection{Refractive Materials}
+We implemented perfect refraction for materials like glass. When a ray hits a refractive surface:
+\begin{enumerate}
+    \item We calculate the ratio of indices of refraction $\eta = \eta_i / \eta_t$ depending on whether the ray is entering or exiting the medium.
+    \item We use Snell's Law to compute the refracted direction.
+    \item If total internal reflection (TIR) occurs (i.e., $\sin^2 \theta_t > 1$), the ray is reflected instead.
+    \item In the integrator, when a ray hits a refractive surface, we spawn a new ray in the refracted (or reflected) direction and continue tracing recursively until a diffuse surface is hit or the max depth is reached.
+\end{enumerate}
+
+\subsection{Anti-aliasing}
+To reduce aliasing artifacts, we implemented super-sampling anti-aliasing (SSAA). Instead of casting a single ray through the center of each pixel, we cast multiple rays ($N$ samples per pixel) with slightly perturbed directions.
+We use a sampler to generate random offsets $(dx, dy) \in [0, 1)^2$ within the pixel area. The final color of the pixel is the average radiance of all sampled rays:
+\begin{equation}
+L_{pixel} = \frac{1}{N} \sum_{i=1}^{N} L(r_i)
+\end{equation}
+This smooths out jagged edges and high-frequency noise.
+
 \section{Results}
+% Show your results here, e.g. the rendered Cornell box image.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\linewidth]{images/cbox_no_light.png}
+    \caption{Rendered Cornell Box without Refraction}
+    \label{fig:cbox}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\linewidth]{images/cbox_no_light_refract.png}
+    \caption{Rendered Cornell Box with Refraction}
+    \label{fig:cbox}
+\end{figure}
 
 \end{document}
 
