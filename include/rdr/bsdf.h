@@ -201,6 +201,7 @@ RDR_REGISTER_CLASS(IdealDiffusion)
 RDR_REGISTER_CLASS(Glass)
 RDR_REGISTER_CLASS(MicrofacetReflection)
 RDR_REGISTER_FACTORY(BSDF, [](const Properties &props) -> BSDF * {
+  // props.printDebug();
   auto type = props.getProperty<std::string>("type", "diffuse");
   if (type == "diffuse") {
     return Memory::alloc<IdealDiffusion>(props);

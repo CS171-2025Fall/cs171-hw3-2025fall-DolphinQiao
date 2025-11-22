@@ -23,6 +23,7 @@ static Vec3f obtainOrientedNormal(
 
 void IdealDiffusion::crossConfiguration(
     const CrossConfigurationContext &context) {
+  properties.printDebug();
   auto texture_name = properties.getProperty<std::string>("texture_name");
   auto texture_ptr  = context.textures.find(texture_name);
   if (texture_ptr != context.textures.end()) {
@@ -104,7 +105,12 @@ Vec3f PerfectRefraction::sample(
   // @see Refract for refraction calculation.
   // @see Reflect for reflection calculation.
 
-  UNIMPLEMENTED;
+  Vec3f wt;
+  if (Refract(interaction.wo, normal, eta_corrected, wt)) {
+    interaction.wi = wt;
+  } else {
+    interaction.wi = Reflect(interaction.wo, normal);
+  }
 
   // Set the pdf and return value, we dont need to understand the value now
   if (pdf != nullptr) *pdf = 1.0F;

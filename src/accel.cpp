@@ -43,7 +43,30 @@ bool AABB::intersect(const Ray &ray, Float *t_in, Float *t_out) const {
   //    for getting the inverse direction of the ray.
   // @see Min/Max/ReduceMin/ReduceMax
   //    for vector min/max operations.
-  UNIMPLEMENTED;
+  
+  Vec3f inv_dir = ray.safe_inverse_direction;
+  Vec3f t1 = (low_bnd - ray.origin) * inv_dir;
+  Vec3f t2 = (upper_bnd - ray.origin) * inv_dir;
+
+  Vec3f t_min_vec = Min(t1, t2);
+  Vec3f t_max_vec = Max(t1, t2);
+
+  Float t_min = ReduceMax(t_min_vec);
+  Float t_max = ReduceMin(t_max_vec);
+
+  if (t_min > t_max) return false;
+  
+  // Check if the intersection is within the ray's valid range
+  // The intersection interval [t_min, t_max] must overlap with [ray.t_min, ray.t_max]
+  Float t_enter = std::max(t_min, ray.t_min);
+  Float t_exit = std::min(t_max, ray.t_max);
+
+  if (t_enter > t_exit) return false;
+
+  if (t_in) *t_in = t_min;
+  if (t_out) *t_out = t_max;
+
+  return true;
 }
 
 /* ===================================================================== *
@@ -91,11 +114,27 @@ bool TriangleIntersect(Ray &ray, const uint32_t &triangle_index,
   // Useful Functions:
   // You can use @see Cross and @see Dot for determinant calculations.
 
-  // Delete the following lines after you implement the function
-  InternalScalarType u = InternalScalarType(0);
-  InternalScalarType v = InternalScalarType(0);
-  InternalScalarType t = InternalScalarType(0);
-  UNIMPLEMENTED;
+  InternalVecType e1 = v1 - v0;
+  InternalVecType e2 = v2 - v0;
+  InternalVecType pvec = Cross(dir, e2);
+  InternalScalarType det = Dot(e1, pvec);
+
+  if (std::abs(det) < 1e-8) return false;
+
+  InternalScalarType inv_det = 1.0 / det;
+  InternalVecType tvec = Cast<InternalScalarType>(ray.origin) - v0;
+  InternalScalarType u = Dot(tvec, pvec) * inv_det;
+
+  if (u < 0 || u > 1) return false;
+
+  InternalVecType qvec = Cross(tvec, e1);
+  InternalScalarType v = Dot(dir, qvec) * inv_det;
+
+  if (v < 0 || u + v > 1) return false;
+
+  InternalScalarType t = Dot(e2, qvec) * inv_det;
+
+  if (!ray.withinTimeRange(t)) return false;
 
   // We will reach here if there is an intersection
 

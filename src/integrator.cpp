@@ -16,6 +16,8 @@
 #include "rdr/ray.h"
 #include "rdr/scene.h"
 #include "rdr/sdtree.h"
+#include "rdr/path.h"
+#include "rdr/shape.h"
 
 RDR_NAMESPACE_BEGIN
 
@@ -51,18 +53,18 @@ void IntersectionTestIntegrator::render(ref<Camera> camera, ref<Scene> scene) {
         // pixel sample positions as 2 floats.
 
         // You should assign the following two variables
-        // const Vec2f &pixel_sample = ...
-        // auto ray = ...
+        const Vec2f &pixel_sample = sampler.getPixelSample();
+        auto ray = camera->generateDifferentialRay(pixel_sample.x, pixel_sample.y);
 
         // After you assign pixel_sample and ray, you can uncomment the
         // following lines to accumulate the radiance to the film.
         //
         //
         // Accumulate radiance
-        // assert(pixel_sample.x >= dx && pixel_sample.x <= dx + 1);
-        // assert(pixel_sample.y >= dy && pixel_sample.y <= dy + 1);
-        // const Vec3f &L = Li(scene, ray, sampler);
-        // camera->getFilm()->commitSample(pixel_sample, L);
+        assert(pixel_sample.x >= dx && pixel_sample.x <= dx + 1);
+        assert(pixel_sample.y >= dy && pixel_sample.y <= dy + 1);
+        const Vec3f &L = Li(scene, ray, sampler);
+        camera->getFilm()->commitSample(pixel_sample, L);
       }
     }
   }
@@ -104,7 +106,9 @@ Vec3f IntersectionTestIntegrator::Li(
       // @see SurfaceInteraction::spawnRay
       //
       // You should update ray = ... with the spawned ray
-      UNIMPLEMENTED;
+      Float pdf;
+      interaction.bsdf->sample(interaction, sampler, &pdf);
+      ray = interaction.spawnRay(interaction.wi);
       continue;
     }
 
@@ -148,7 +152,11 @@ Vec3f IntersectionTestIntegrator::directLighting(
   //
   //    You can use iteraction.p to get the intersection position.
   //
-  UNIMPLEMENTED;
+  test_ray.setTimeMax(dist_to_light - 1e-4);
+  SurfaceInteraction shadow_interaction;
+  if (scene->intersect(test_ray, shadow_interaction)) {
+    return Vec3f(0.0f);
+  }
 
   // Not occluded, compute the contribution using perfect diffuse diffuse model
   // Perform a quick and dirty check to determine whether the BSDF is ideal
@@ -169,8 +177,7 @@ Vec3f IntersectionTestIntegrator::directLighting(
         std::max(Dot(light_dir, interaction.normal), 0.0f);  // one-sided
 
     // You should assign the value to color
-    // color = ...
-    UNIMPLEMENTED;
+    color = bsdf->evaluate(interaction) * cos_theta * point_light_intensity / (dist_to_light * dist_to_light);
   }
 
   return color;
@@ -220,5 +227,28 @@ Vec3f IncrementalPathIntegrator::Li(  // NOLINT
   // This is left as the next assignment
   UNIMPLEMENTED;
 }
+
+RDR_REGISTER_FACTORY(Integrator, [](const Properties &props) -> Integrator * {
+  auto type = props.getProperty<std::string>("type", "path");
+  if (type == "intersection_test" || type == "path") {
+    return Memory::alloc<IntersectionTestIntegrator>(props);
+  } else {
+    Exception_("Integrator type {} not found", type);
+  }
+
+  return nullptr;
+})
+
+RDR_REGISTER_FACTORY(Shape, [](const Properties &props) -> Shape * {
+  auto type = props.getProperty<std::string>("type");
+  if (type == "sphere") {
+    return Memory::alloc<Sphere>(props);
+  } else if (type == "mesh") {
+    return Memory::alloc<TriangleMesh>(props);
+  } else {
+    Exception_("Shape type {} not found", type);
+  }
+  return nullptr;
+})
 
 RDR_NAMESPACE_END
